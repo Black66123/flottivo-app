@@ -1,0 +1,29 @@
+# Flottivo – Schutz der internen Ordner, kurze Adressen, Mandanten-Adressen
+Options -Indexes
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  # Signal an PHP: kurze Adressen (ohne index.php) sind verfügbar
+  RewriteRule ^ - [E=MV_REWRITE:1]
+  # Interne Ordner sperren
+  RewriteRule ^(app|data|werkzeuge|app-projekt)(/|$) - [F,L]
+  # robots.txt und sitemap.xml werden dynamisch erzeugt
+  RewriteRule ^robots\.txt$ index.php?r=robots-txt [L]
+  RewriteRule ^sitemap\.xml$ index.php?r=sitemap-xml [L]
+  # Plattform-Verwaltung unter /verwaltung
+  RewriteRule ^verwaltung$ plattform.php [QSA,L]
+  # Vermietung über Pfad: /m/<kuerzel>/ (falls keine eigene Subdomain/Domain)
+  RewriteRule ^m/([a-z0-9-]+)/?$ index.php?mandant=$1 [QSA,L]
+  RewriteRule ^m/([a-z0-9-]+)/(assets/.*)$ $2 [L]
+  RewriteRule ^m/([a-z0-9-]+)/index\.php$ index.php?mandant=$1 [QSA,L]
+  RewriteRule ^m/([a-z0-9-]+)/([a-z][a-z_-]*)$ index.php?mandant=$1&r=$2 [QSA,L]
+  # Kurze Adressen: /registrieren, /impressum, /reservierungen …
+  RewriteCond %{REQUEST_FILENAME} !-f
+  RewriteCond %{REQUEST_FILENAME} !-d
+  RewriteRule ^([a-z][a-z_-]*)$ index.php?r=$1 [QSA,L]
+</IfModule>
+<FilesMatch "\.(sqlite|sqlite-wal|sqlite-shm|log|lock|key|txt)$">
+  Require all denied
+</FilesMatch>
+<FilesMatch "^(ANLEITUNG.*|config.*)\.(txt|php)$">
+  Require all denied
+</FilesMatch>

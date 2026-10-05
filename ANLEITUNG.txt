@@ -1,0 +1,505 @@
+FLOTTIVO – MIETVERWALTUNG (WHITE-LABEL-SAAS-PLATTFORM)
+Version 2.5
+
+Installation auf normalem Webhosting (ohne eigenen Server): siehe ANLEITUNG-WEBHOSTING.txt
+
+Eine Installation für beliebig viele Autovermietungen. Jede Vermietung hat
+eigene Daten, ein eigenes Logo, eigene Farben und eine eigene Adresse. Sie als
+Betreiber verwalten alles über plattform.php, Ihre Kunden buchen und zahlen
+selbst über Stripe.
+
+==================================================================
+1. VORAUSSETZUNGEN
+==================================================================
+- Webserver mit PHP 8.1 oder neuer (Ihr Rootserver: Apache oder nginx)
+- PHP-Erweiterungen: pdo_sqlite, gd, zip, openssl, mbstring, iconv, curl
+- HTTPS (SSL-Zertifikat) für alle Adressen – Pflicht
+- Ein E-Mail-Postfach mit SMTP-Zugang (z. B. bei dogado) für den Versand
+- Ein Stripe-Konto (stripe.com) für die Abrechnung
+- Keine separate Datenbank nötig: alle Daten liegen im Ordner „data“.
+
+==================================================================
+2. INSTALLATION / UPDATE
+==================================================================
+NEU INSTALLIEREN
+1. Adressen anlegen (DNS bei dogado → A-Record auf die IP des Rootservers):
+     ihre-plattform.de          Startseite (Website mit Preisen, Registrierung)
+     *.ihre-plattform.de        Wildcard für die Kunden (kunde.ihre-plattform.de)
+     admin.ihre-plattform.de    optional: nur für die Plattform-Verwaltung
+   Webserver: alle drei auf DENSELBEN Ordner zeigen lassen, SSL einrichten
+   (Wildcard-Zertifikat per Let's Encrypt mit DNS-Prüfung).
+2. Den Inhalt dieses Ordners hochladen, Ordner „data“ beschreibbar machen
+   (Rechte 775, Besitzer = Webserver-Benutzer, z. B. www-data).
+3. https://ihre-plattform.de/plattform.php öffnen → Plattform einrichten.
+   Der Einrichtungscode steht in der Datei data/einrichtungscode.txt
+   (wird beim ersten Aufruf erzeugt, per FTP/SSH öffnen). So kann niemand
+   außer Ihnen die frische Installation übernehmen.
+4. Danach in plattform.php der Reihe nach:
+   a) Plattform → Allgemein: Name, Website-Adresse (https://ihre-plattform.de),
+      Basis-Domain (ihre-plattform.de), Support-E-Mail, Logo, Farben.
+      WICHTIG: Ohne Website-Adresse/Basis-Domain werden aus Sicherheitsgründen
+      keine Links per E-Mail verschickt und die Registrierung ist gesperrt.
+   b) Plattform → Betreiber: Ihre Firmendaten (füllen Impressum, Datenschutz,
+      Nutzungsbedingungen und AVV automatisch).
+   c) Plattform → E-Mail: SMTP-Daten eintragen, Test-E-Mail senden.
+      SPF/DKIM für die Absender-Domain setzen (bessere Zustellung).
+   d) Tarife: Preise/Limits prüfen (Starter/Professional/Business sind
+      vorbereitet).
+   e) Plattform → Stripe: Anleitung auf der Seite Schritt für Schritt folgen
+      (Produkte + Preise, API-Schlüssel, Webhook, Kundenportal, Mahnwesen).
+      Erst im Test-Modus (sk_test_…) ausprobieren, dann Live-Schlüssel.
+   f) System: Cronjob einrichten (siehe Punkt 6) und Prüfliste abarbeiten.
+   g) Passwort & 2FA: Zwei-Faktor-Anmeldung für Ihren Zugang aktivieren.
+   h) Rechtstexte von einem Anwalt prüfen lassen (Plattform → Rechtstexte).
+
+UPDATE VON VERSION 1.x ODER 2.0
+1. Vorher den Ordner „data“ komplett sichern.
+2. Alle Dateien hochladen und überschreiben – AUSSER dem Ordner „data“.
+3. Seite aufrufen: Datenbanken werden automatisch aktualisiert.
+   Von 1.x: plattform.php aufrufen, die alten Daten werden als erste
+   Vermietung übernommen (bisherige Adresse eintragen – für Ihre Mitarbeiter
+   ändert sich nichts).
+
+NGINX (statt Apache): Diese Regeln in den server-Block übernehmen:
+     location ^~ /data/ { deny all; }
+     location ^~ /app/ { deny all; }
+     location ^~ /werkzeuge/ { deny all; }
+     location ~ \.(sqlite|sqlite-wal|sqlite-shm|log|lock|key)$ { deny all; }
+     location ~ ^/(ANLEITUNG|config) { deny all; }
+     (Liegt die Software in einem Unterordner, z. B. /flottivo, dann
+      /flottivo/data/ usw. eintragen.)
+     rewrite ^/robots\.txt$ /index.php?r=robots-txt last;
+     rewrite ^/sitemap\.xml$ /index.php?r=sitemap-xml last;
+     rewrite ^/verwaltung$ /plattform.php last;
+     rewrite ^/m/([a-z0-9-]+)/?$ /index.php?mandant=$1 last;
+     rewrite ^/m/([a-z0-9-]+)/index\.php$ /index.php?mandant=$1 last;
+     rewrite ^/m/([a-z0-9-]+)/(assets/.*)$ /$2 last;
+     rewrite ^/m/([a-z0-9-]+)/([a-z][a-z_-]*)$ /index.php?mandant=$1&r=$2 last;
+     location / { try_files $uri $uri/ @kurz; }
+     location @kurz { rewrite ^/([a-z][a-z_-]*)$ /index.php?r=$1 last; }
+     und im PHP-Block:  fastcgi_param MV_REWRITE 1;   (schaltet kurze Adressen ein)
+Prüfen: https://ihre-plattform.de/data/plattform.sqlite muss „Forbidden“ zeigen.
+plattform.php → System prüft das zusätzlich automatisch.
+
+NOCH SICHERER: Datenordner außerhalb des Webroots
+Den Ordner „data“ eine Ebene über den Webordner legen und den Pfad in
+config.php eintragen (Vorlage: config.beispiel.php). Dann ist er nie per
+Browser erreichbar, egal wie der Webserver eingestellt ist.
+
+==================================================================
+3. SO LÄUFT DAS GESCHÄFT
+==================================================================
+SELBST-REGISTRIERUNG (Startseite → „Kostenlos testen“)
+- Kunde gibt Firma, Name, E-Mail, Passwort an, wählt einen Tarif und stimmt
+  Nutzungsbedingungen + AVV zu → bekommt eine Bestätigungs-E-Mail.
+- Nach dem Klick ist der Zugang sofort fertig (kunde.ihre-plattform.de),
+  Testphase 14 Tage (einstellbar). Sie erhalten eine Info-Mail.
+- 3 Tage vor Ende und am Ende erinnert das System automatisch per E-Mail.
+- Nach Ablauf: Mitarbeiter des Kunden sehen „Zugang pausiert“, der
+  Administrator kommt nur noch auf „Abo & Tarif“. Daten bleiben erhalten.
+
+BEZAHLUNG (Abo & Tarif, im Menü des Kunden)
+- Kunde wählt Tarif → Stripe-Bezahlseite (Karte/SEPA) → zurück → aktiv.
+- Tarifwechsel jederzeit (anteilige Verrechnung), Rechnungen, Zahlungsdaten
+  und Kündigung im Stripe-Kundenportal.
+- Zahlung fehlgeschlagen: Kunde bekommt Hinweis + E-Mail, Stripe versucht es
+  erneut. Wird das Abo gekündigt/unbezahlt (bzw. 14 Tage nach Ablauf des
+  bezahlten Zeitraums noch offen), pausiert der Zugang automatisch.
+- Rechnungen an Ihre Kunden verschickt Stripe (Billing → Rechnungen).
+- AVV als PDF mit den Daten des Kunden: „Abo & Tarif“ → AVV herunterladen.
+
+KUNDEN SELBST ANLEGEN (plattform.php → Neue Vermietung)
+- Mit „Einladung per E-Mail“ legt der Kunde sein Passwort selbst fest.
+- Tarif zuweisen; individuelle Limits und Preise sind möglich.
+- Status „Gesperrt“ = harte Sperre (auch ohne Zahlungsbezug).
+- „Als Support anmelden“ öffnet die Vermietung als deren Administrator
+  (Einmal-Link, wird beim Kunden protokolliert).
+
+TARIFE
+- Jeder Tarif hat Preis, max. Fahrzeuge, max. Benutzer und Funktionen:
+  E-Mail-Versand an Mieter, Website-Schnittstelle, eigene Domain.
+- Eigene Domain für einen Kunden: Kunde setzt DNS (CNAME/A-Record) auf Ihren
+  Server, Sie richten die Domain + SSL im Webserver ein und tragen sie bei
+  der Vermietung unter „Eigene Domain“ ein.
+
+STARTSEITE BEARBEITEN (plattform.php → Startseite)
+- Alle Texte, Bilder, Fragen, Funktionen, Kundenstimmen und Abschnitte der
+  öffentlichen Startseite ändern Sie dort über einfache Formulare – ohne
+  Programmierkenntnisse. „Speichern“ = sofort live. „Startseite ansehen“
+  öffnet die Seite in einem neuen Tab.
+- Einträge hinzufügen („+ … hinzufügen“), verschieben („Nach oben/unten“)
+  und entfernen. Jeder Abschnitt lässt sich ausblenden und auf den
+  Standardtext zurücksetzen.
+- Bilder: JPG/PNG/WEBP hochladen, sie werden automatisch verkleinert.
+  Ohne eigenes Bild zeigt die Seite die mitgelieferten Produktgrafiken.
+- Preise kommen automatisch aus „Tarife“; Name, Logo und Farbe aus
+  „Plattform → Allgemein“. Platzhalter in Texten: {NAME} und {TAGE}.
+- Kundenstimmen erscheinen erst, wenn Sie welche eintragen – bitte nur echte
+  Zitate mit Einverständnis der Kunden.
+- Schriften liegen auf Ihrem Server (keine Verbindung zu Google Fonts).
+
+==================================================================
+4. FUNKTIONEN FÜR IHRE KUNDEN (zusätzlich zur Mietverwaltung)
+==================================================================
+- Eigenes Logo, Farben, Name (Einstellungen → Erscheinungsbild)
+- Mitarbeiter per E-Mail einladen; „Passwort vergessen“ auf der Anmeldeseite
+- Zwei-Faktor-Anmeldung (Passwort & Sicherheit) – Admin kann sie bei
+  Handyverlust für einen Mitarbeiter zurücksetzen
+- Mietvertrag, Protokolle und Rechnungen per E-Mail an den Mieter senden
+  (Absender = Name der Vermietung, Antworten gehen an deren Firmen-E-Mail).
+  In der Testphase nur an die beim Kunden hinterlegte Adresse.
+- Datensicherung als ZIP (Einstellungen)
+
+GPS-ORTUNG (Anbindung an Ihr Ortungsportal)
+Die Mietverwaltung zeigt die Tracker aus Ihrem Ortungsportal direkt an:
+Flottenkarte (Menü „GPS-Ortung“), Standort und km-Stand beim Fahrzeug,
+„Fahrzeug jetzt“ in der laufenden Reservierung, km-Stand wird bei Übergabe
+und Rücknahme vorgeschlagen, Hinweis im Mietvertrag.
+Die Abfrage läuft nur über Ihren Server – Ihre Kunden sehen weder die
+Adresse des Ortungsservers noch die Technik dahinter.
+
+Einrichten (einmalig):
+1. plattform.php → Einstellungen → GPS-Ortung:
+   - Adresse des Ortungsservers (Schnittstelle), z. B.
+     https://ortung.ihre-domain.de  (läuft der Ortungsserver auf demselben
+     Server, geht auch http://127.0.0.1:8082)
+   - Adresse des Ortungsportals für Ihre Kunden (Link „Ortungsportal öffnen“)
+   - optional eigene Kartenkacheln (sonst OpenStreetMap)
+2. plattform.php → Tarife: beim gewünschten Tarif die Funktion
+   „GPS-Ortung“ anhaken (z. B. Komplettpaket). Vermietungen ohne Tarif
+   haben alle Funktionen.
+
+Pro Vermietung:
+1. Im Ortungsportal ein eigenes Kunden-Konto (Benutzer) für die Vermietung
+   anlegen und ihm NUR deren Tracker zuweisen.
+2. In diesem Konto einen Zugangsschlüssel (Token) erzeugen
+   (Kontoeinstellungen → Token; Ablaufdatum weit in der Zukunft).
+3. plattform.php → Vermietung bearbeiten → „Zugangsschlüssel des
+   Kunden-Kontos“ eintragen → Speichern → „GPS-Verbindung testen“.
+   Es erscheint die Anzahl der sichtbaren Tracker.
+4. Die Vermietung ordnet im Menü „GPS-Ortung“ jedem Fahrzeug seinen
+   Tracker zu (nur Administratoren). Fremde Tracker sind nicht wählbar.
+5. Hinweistext im Mietvertrag: Einstellungen → „GPS-Hinweis im Mietvertrag“.
+
+Gut zu wissen:
+- Positionen werden 15 Sekunden, die Trackerliste 5 Minuten zwischen-
+  gespeichert; die Karte aktualisiert sich alle 30 Sekunden.
+- Den km-Stand gibt es nur, wenn der Tracker den Kilometerzähler meldet
+  (im Ortungsportal: Kilometerzähler/Odometer am Gerät einstellen).
+- Datenschutz: Mieter müssen über die Ortung informiert sein
+  (Mietbedingungen, Datenschutzerklärung, Hinweis im Vertrag).
+
+ANGEBOTE (Menü „Angebote“)
+- Angebot für ein oder mehrere Fahrzeuge der Flotte – für bestehende Kunden
+  oder neue Interessenten (Name, Firma, E-Mail reichen).
+- Zwei Arten: „Alle Fahrzeuge zusammen“ (z. B. Firmenkunde, Gruppe, mit
+  Gesamtpreis) oder „Alternativen“ (der Kunde wählt eines aus).
+- Preis leer lassen = automatisch aus der Preisliste des Fahrzeugs; ebenso
+  Freikilometer, Mehr-km und Kaution. Extras und Rabatt pro Fahrzeug.
+- Verfügbarkeit wird angezeigt („frei“ / „belegt“). Gültigkeit und Nummern-
+  kürzel unter Einstellungen → Nummern & Fristen.
+- „Per E-Mail senden“: PDF im Anhang + persönlicher Online-Link. Über den
+  Link sieht der Kunde das Angebot im Design der Vermietung und kann es mit
+  einem Klick verbindlich annehmen (bzw. sein Wunschfahrzeug wählen) oder
+  ablehnen. Bei Annahme: E-Mail an die Firmen-E-Mail + Aufgabe fürs Büro.
+- „Reservieren“ wandelt das Angebot in Reservierungen um; neue Interessenten
+  werden dabei automatisch als Kunde angelegt.
+- „Kopieren“ erstellt ein neues Angebot auf Basis eines alten.
+- Der E-Mail-Text ist unter „E-Mail-Texte“ anpassbar ({link} = Online-Link).
+
+DOKUMENTDESIGN (Einstellungen → „Dokumentdesign“, nur Admins)
+- Drei Designs: Klassisch, Modern (Kopf in Markenfarbe), Elegant.
+- Gilt einheitlich für Rechnungen, Angebote und Reservierungsbestätigungen:
+  Briefformat nach DIN 5008 (Fensterumschlag), Logo, Markenfarbe, Positions-
+  tabelle, Summenblock und Fußzeile mit Firmen-, Bank- und Steuerdaten.
+- Je Design gibt es Vorschau-Links mit Beispieldaten.
+
+MIETVERTRAG ANPASSEN (Einstellungen → „Mietvertrag anpassen“, nur Admins)
+- Überschrift, Einleitungstext, welche Angaben im Vertrag stehen (Ausweis,
+  Geburtsdaten, Preise, Kaution, Zustand, Skizze …)
+- Selbstbeteiligung: pro Fahrzeug unter Fahrzeuge → Bearbeiten eintragen.
+  Sie wird automatisch in Reservierung, Mietvertrag, Bestätigung und Angebot
+  übernommen und kann pro Reservierung geändert werden (z. B. bei gebuchter
+  SB-Reduzierung). Mit der Unterschrift wird sie im Vertrag festgeschrieben.
+- Eigene Vertragsfelder (z. B. Tankregelung, Auslandsfahrten) mit
+  Standardwert – pro Reservierung im Abschnitt „Für den Mietvertrag“ änderbar,
+  dazu ein Feld „Sondervereinbarungen“.
+- Zusätzliche Klauseln, Text über den Unterschriften, Bezeichnungen,
+  Mietbedingungen (AGB) und GPS-Hinweis.
+- Platzhalter wie {mieter}, {fahrzeug}, {abholung} werden automatisch ersetzt.
+- „Speichern & Vorschau“ zeigt den Vertrag mit Beispieldaten.
+- Beim Unterschreiben (Übergabe) wird die Vertragsfassung eingefroren:
+  spätere Änderungen verändern bereits geschlossene Verträge NICHT.
+
+RESERVIERUNGSBESTÄTIGUNG & E-MAIL-TEXTE
+- Jede bestätigte Reservierung hat eine Reservierungsbestätigung (PDF), die
+  mit einem Klick per E-Mail an den Kunden geht. Hinweistext (z. B. „bitte
+  Führerschein mitbringen“) unter „Mietvertrag anpassen“.
+- Einstellungen → „E-Mail-Texte“: Betreff und Text für Bestätigung, Vertrag,
+  Protokoll und Rechnung sowie die Signatur – mit Platzhaltern.
+
+EIGENER MAILSERVER PRO VERMIETUNG (Einstellungen → „Eigener Mailserver“)
+- Jede Vermietung kann ihr eigenes Postfach (SMTP) hinterlegen. Dann gehen
+  ALLE ihre E-Mails (Bestätigungen, Verträge, Rechnungen, Einladungen,
+  Aufgaben) direkt von ihrer Adresse heraus, z. B. info@ihre-vermietung.de.
+- Aktiviert wird erst, wenn die Test-E-Mail erfolgreich war. Ohne eigenen
+  Server gehen Mails wie bisher über die Plattform (Absendername = Vermietung).
+- Passwörter werden verschlüsselt gespeichert. Der Schlüssel liegt in
+  data/geheim.key – bei Umzug/Wiederherstellung UNBEDINGT mitnehmen (ist in
+  der nächtlichen Sicherung enthalten). Ohne ihn müssen die Vermietungen ihr
+  Mailpasswort neu eingeben.
+- Aus Sicherheitsgründen sind interne Serveradressen gesperrt; erlaubt sind
+  die Ports 587, 465, 25 und 2525 mit Verschlüsselung (STARTTLS/SSL).
+- Mails der Plattform an Ihre Kunden (Testphase, Abo) gehen weiterhin über
+  den Server der Plattform.
+
+AUFGABEN (z. B. für Werkstatt und Mechaniker)
+Menü „Aufgaben“: Aufgaben mit Fahrzeug, Art (Werkstatt, Service, TÜV, Reifen,
+Aufbereitung, Büro), Fälligkeit, Priorität, zuständiger Person, Fotos und
+Notizen. Die Zahl im Menü zeigt offene Aufgaben (rot = fällig/überfällig).
+- „Sichtbar für“ pro Aufgabe: Alle Mitarbeiter / Nur Werkstatt / Nur Büro /
+  Nur zuständige Person. Administratoren sehen immer alles.
+- Rolle „Werkstatt / Mechaniker“ (Benutzer → Rolle): sieht nur Aufgaben,
+  Fahrzeuge, Schäden und Fristen – keine Kunden, Reservierungen, Rechnungen,
+  Preise oder GPS. Fahrzeugdaten kann diese Rolle nicht ändern.
+- Beim Erledigen können km-Stand, nächster Service bzw. HU/TÜV eingetragen
+  werden; das Fahrzeug wird damit automatisch aktualisiert, auf Wunsch wieder
+  freigegeben und ein verknüpfter Schaden als behoben markiert.
+- Aufgaben direkt anlegen: beim Fahrzeug („+ Aufgabe“), beim Schaden
+  („+ Aufgabe für Werkstatt“) und bei den Fristen („+ Aufgabe“).
+- Wird jemandem eine Aufgabe zugewiesen, bekommt er eine E-Mail (wenn der
+  E-Mail-Versand eingerichtet ist).
+
+FLOTTIVO-APP (iPhone & Android) UND „MEIN BEREICH“ FÜR MIETER
+- Eine App für alle Vermietungen: Vermietung wählen → Mitarbeiter oder Mieter.
+  Ausführliche Anleitung für die Veröffentlichung: app-projekt/ANLEITUNG-APP.txt
+  (den Ordner app-projekt NICHT auf den Webserver hochladen).
+- „Mein Bereich“ für Mieter (auch im Browser): Adresse …/mein. Anmeldung mit
+  E-Mail + Code, Buchungen, Verträge, Rechnungen, Schaden melden, Anfragen,
+  Datenlöschung beantragen. Platzhalter für E-Mails: {mein_bereich}.
+- Mitarbeiter bleiben in der App angemeldet; Geräte sehen und abmelden unter
+  „Passwort & Sicherheit“. Passwort ändern meldet alle anderen Geräte ab.
+- Push-Benachrichtigungen: Plattform → Einstellungen → „App & Push“
+  (Firebase-Dienstkonto). Benachrichtigt werden: neue Anfragen (Website/App),
+  Schadensmeldungen, zugewiesene Aufgaben, Support-Antworten; Mieter bei
+  Buchungsbestätigung und neuen Dokumenten.
+- QR-Code für den Schalter: Einstellungen (bei jeder Vermietung) → „Flottivo-App“.
+
+VERSCHLÜSSELUNG DER KUNDENDATEN
+- Verschlüsselt gespeichert (AES-256-GCM, je Vermietung ein eigener Schlüssel):
+  Adresse (Straße), Geburtsdatum/-ort, Telefon, E-Mail, Ausweis- und
+  Führerscheinnummer, Behörde, Notizen, Sperrgrund, Zusatzfahrer, interne
+  Notizen der Reservierungen, E-Mail-Protokoll, Verlauf – sowie ALLE Fotos,
+  Ausweiskopien, Unterschriften und Support-Screenshots. Außerdem
+  Zugangsdaten (Mailserver-Passwörter, Stripe- und GPS-Schlüssel).
+- Lesbar bleiben nur Name, Firma, PLZ und Ort (für Suche und Sortierung).
+  Die Suche nach E-Mail, Telefon oder Führerscheinnummer funktioniert trotzdem.
+- Bestehende Daten werden nach dem Update automatisch verschlüsselt (beim
+  ersten Aufruf jeder Vermietung bzw. beim nächsten Cron-Lauf).
+- WICHTIG – NOTFALL-SCHLÜSSEL: /verwaltung → System → „Verschlüsselung“ →
+  mit Passwort anzeigen, ausdrucken bzw. im Passwort-Manager speichern und
+  „Ich habe den Schlüssel sicher aufbewahrt“ klicken. Ohne diesen Schlüssel
+  sind die Kundendaten bei Verlust des Servers NICHT wiederherstellbar.
+  Nach der Bestätigung wird der Schlüssel nicht mehr neben den
+  Datensicherungen abgelegt (wer eine Sicherung stiehlt, kann nichts lesen).
+- Schlüssel wiederherstellen (Serverumzug): Teil zwischen „FLK1-“ und dem
+  letzten Bindestrich in die Datei data/geheim.key schreiben.
+- Noch sicherer: Schlüssel in config.php eintragen ('schluessel' => '…',
+  siehe config.beispiel.php) und data/geheim.key löschen.
+- Fehlt der Schlüssel oder ist er falsch, zeigt die Seite „Daten sind
+  gesperrt“ – es wird NIE still ein neuer Schlüssel erzeugt.
+- Grenzen: Die Verschlüsselung schützt gegen Diebstahl von Datenbank,
+  Sicherungen oder Festplatte. Wer den kompletten Server samt Schlüssel
+  übernimmt, kann mitlesen – daher zusätzlich: starke Passwörter, 2FA für alle
+  Admins, Updates einspielen, HTTPS.
+
+SUPPORT-TICKETS (Kunden ↔ Plattform-Verwaltung)
+- Ihre Kunden finden im Menü „Hilfe & Support“: Ticket erstellen mit Betreff,
+  Kategorie, Dringlichkeit, Beschreibung und bis zu 4 Screenshots. Version,
+  Browser und die Seite, auf der das Problem auftrat, werden automatisch als
+  interne Notiz mitgeschickt (für den Kunden unsichtbar).
+- Sie antworten in der Verwaltung (/verwaltung → „Support-Tickets“). Die rote
+  Zahl im Menü zeigt Tickets, die auf Ihre Antwort warten. Dringende Tickets
+  stehen oben. Pro Ticket: Antwort, interne Notiz, Status, „Übernehmen“,
+  direkte Support-Anmeldung bei der Vermietung.
+- E-Mails: neue Tickets und Antworten der Kunden gehen an die Support-E-Mail
+  (Plattform → Einstellungen), sonst an alle Plattform-Admins. Der Kunde
+  bekommt Ihre Antwort per E-Mail mit Link zum Ticket. Voraussetzung: E-Mail-
+  Versand der Plattform ist eingerichtet.
+- Antwortet der Kunde auf ein gelöstes Ticket, öffnet es sich wieder. Gelöste
+  Tickets werden nach 14 Tagen automatisch geschlossen (cron.php).
+- Screenshots liegen geschützt in data/support.
+
+KURZE ADRESSEN (ohne „.php“)
+- Alle Seiten haben kurze Adressen: ihre-plattform.de/registrieren,
+  /impressum … in der Mietverwaltung z. B. /reservierungen,
+  /angebote, /aufgaben. Die Plattform-Verwaltung liegt unter /verwaltung.
+- Funktioniert automatisch mit der mitgelieferten .htaccess (Apache) bzw.
+  den nginx-Regeln oben. Alte Links mit index.php funktionieren weiter und
+  werden auf der Website per 301 auf die kurze Adresse umgeleitet.
+- Abschalten (nur falls der Server keine Umleitungen kann):
+  config.php mit  'kurze_adressen' => false.
+
+GOOGLE (SEO)
+- Titel und Beschreibung: plattform.php → Startseite → „Allgemein & Google“.
+- Automatisch: sitemap.xml, robots.txt (Kunden-Adressen und Verwaltung
+  werden NIE indexiert), eindeutige Adressen (canonical), strukturierte
+  Daten für Google (Firma, Software mit Preisen, Häufige Fragen),
+  Vorschaubild für WhatsApp/Facebook/LinkedIn, schnelle eigene Schriften.
+- Einmalig: Google Search Console (search.google.com/search-console)
+  → Domain hinzufügen → Bestätigungscode unter „Allgemein & Google“
+  eintragen → Sitemap  https://ihre-plattform.de/sitemap.xml  einreichen.
+
+AUTOMATISCHE SUBDOMAINS (jeder Kunde bekommt kunde.ihre-plattform.de)
+Die Software vergibt bei jeder neuen Vermietung (Registrierung oder von
+Ihnen angelegt) automatisch die Adresse  <kürzel>.<Basis-Domain>.
+Damit das ohne Handarbeit funktioniert, braucht der Server einmalig:
+1. DNS bei dogado: A-Record  *  →  IP Ihres Rootservers
+   (zusätzlich A-Record für die Hauptdomain und www).
+2. Webserver: alle Subdomains auf den Programmordner
+   (Apache: ServerAlias *.ihre-plattform.de – Vorlage im Ordner werkzeuge).
+3. SSL für alle Subdomains – einen Weg wählen (Details werkzeuge/LIESMICH.txt):
+   A) Caddy als Webserver: holt jedes Zertifikat automatisch (empfohlen)
+   B) Wildcard-Zertifikat *.ihre-plattform.de (Let's Encrypt per DNS)
+   C) Skript werkzeuge/zertifikate.sh per Cron (erweitert das Zertifikat
+      automatisch um jede neue Subdomain, bis ca. 90 Kunden)
+4. plattform.php → Einstellungen → Allgemein: Basis-Domain eintragen.
+5. plattform.php → System: „Automatische Subdomains“ und
+   „SSL-Zertifikat gilt für alle Subdomains“ müssen grün sein.
+Ab dann ist jede neue Vermietung sofort unter ihrer Subdomain erreichbar.
+
+==================================================================
+5. SICHERHEIT
+==================================================================
+- Jede Vermietung hat eine eigene Datenbank; Sitzungen sind fest an eine
+  Vermietung gebunden.
+- Passwörter nur als Hash, 2FA (TOTP) für Mitarbeiter und Plattform-Admins,
+  Sperre nach 8 Fehlversuchen, automatische Abmeldung nach 8 Std. Inaktivität,
+  Abmeldung aller Geräte nach Passwortänderung.
+- E-Mail-Links werden nur mit fest eingetragenen Adressen erzeugt.
+- Stripe-Webhooks werden per Signatur geprüft.
+- Empfehlung: Plattform-Verwaltung auf admin.ihre-plattform.de beschränken
+  (Plattform → Allgemein) und 2FA für alle Admins aktivieren.
+- Vermietungen produktiv über eigene Subdomain (kunde.ihre-plattform.de)
+  oder eigene Domain betreiben, nicht über /m/<kürzel>/ – so sind die
+  Vermietungen auch im Browser sauber voneinander getrennt.
+- Sitzungen liegen im eigenen Ordner data/sessions, neue Dateien sind nicht
+  für andere Benutzer des Servers lesbar.
+- Fotos aus Übergaben, Rücknahmen und Kundendokumenten können nur
+  Administratoren löschen; jede Löschung wird protokolliert.
+
+PROFESSIONELLER BETRIEB – CHECKLISTE
+[ ] HTTPS überall, plattform.php → System komplett grün
+[ ] Datenordner außerhalb des Webroots (config.php) oder Test „gesperrt“ grün
+[ ] 2FA für alle Plattform-Admins und Administratoren der Vermietungen
+[ ] Sicherungen täglich (Cron) UND zusätzlich auf einen anderen Server
+    kopieren; Wiederherstellung einmal ausprobieren
+[ ] PHP-Version aktuell halten (Sicherheitsupdates), Server-Updates einspielen
+[ ] Fehlerprotokoll (System) regelmäßig ansehen
+[ ] Rechtstexte, AVV und TOMs anwaltlich prüfen lassen; Verzeichnis der
+    Verarbeitungstätigkeiten führen; AVV mit Hoster/E-Mail-Dienst
+[ ] Vor dem Start mit vielen Kunden: externen Penetrationstest beauftragen
+
+==================================================================
+6. BETRIEB: TÄGLICHE AUFGABEN, DATENSICHERUNG
+==================================================================
+Cronjob am Rootserver (crontab -e des Webserver-Benutzers):
+     0 3 * * * php /pfad/zur/mietverwaltung/cron.php
+Ohne Shell: die Webcron-Adresse aus plattform.php → System täglich aufrufen.
+Der Cron:
+- sichert jede Nacht alle Vermietungen + Plattform nach data/backups
+  (Aufbewahrung 14 Tage, einstellbar),
+- verschickt Erinnerungen zur Testphase,
+- räumt abgelaufene Links und Protokolle auf.
+WICHTIG: data/backups zusätzlich regelmäßig auf einen ANDEREN Server/Speicher
+kopieren (z. B. Hetzner Storage Box per rsync).
+Wiederherstellen einer Vermietung: ZIP nach data/mandanten/<kürzel> entpacken.
+
+plattform.php → System zeigt eine Prüfliste (PHP, HTTPS, E-Mail, Stripe,
+Webhook, Cron, 2FA …), die letzten Sicherungen und das Fehlerprotokoll.
+
+==================================================================
+7. RECHTLICHES (bitte ernst nehmen)
+==================================================================
+- Impressum, Datenschutzerklärung, Nutzungsbedingungen und AVV sind MUSTER.
+  Vor dem Start von einem Anwalt (IT-Recht) prüfen und anpassen lassen.
+- Sie verarbeiten Daten der Mieter Ihrer Kunden im Auftrag: Der AVV wird bei
+  der Registrierung akzeptiert und steht als PDF bereit.
+- Prüfen Sie den Vertrag mit Ihrem Hoster (AVV mit dem Rechenzentrum) und
+  tragen Sie Hoster und E-Mail-Dienst unter „Betreiber“ ein.
+- Stripe: Firmenangaben, USt-IdNr. und ggf. Stripe Tax einrichten.
+
+==================================================================
+8. DER ABLAUF EINER VERMIETUNG (für Ihre Kunden)
+==================================================================
+1. RESERVIERUNG
+   „+ Reservierung“ → Kunde wählen (oder neu anlegen) → Fahrzeug, Zeitraum,
+   Mietpaket. Der Preis wird aus der Preisliste des Fahrzeugs vorgeschlagen.
+   Doppelbuchungen werden automatisch verhindert.
+   Hinweise erscheinen, wenn z. B. der Kunde zu jung ist, der Führerschein
+   zu neu oder abgelaufen ist oder der Kunde gesperrt ist.
+
+2. ÜBERGABE (am besten am Tablet)
+   In der Reservierung „Übergabe starten“ → Kilometer, Tank, Zubehör,
+   Fotos, neue Schäden auf der Skizze antippen → Kaution eintragen →
+   Kunde und Mitarbeiter unterschreiben mit dem Finger.
+   Danach ist der Mietvertrag mit Nummer (MV-2026-0001) fertig und als PDF
+   druckbar – inklusive Mietbedingungen und Unterschriften.
+
+3. RÜCKNAHME
+   „Rücknahme starten“ → Kilometerstand eintragen. Die Mehrkilometer werden
+   automatisch berechnet. Tank, Reinigung, Verspätung als Nachberechnung
+   hinzufügen. Neue Schäden markieren. Unterschreiben.
+
+4. RECHNUNG & KAUTION
+   „Rechnung erstellen“ übernimmt Miete, Extras, Nachberechnungen und
+   Schäden (Kostenträger „Mieter“) automatisch. PDF drucken oder mailen.
+   Kaution im Mietvorgang als zurückgezahlt bzw. einbehalten markieren.
+
+==================================================================
+9. WEITERE FUNKTIONEN
+==================================================================
+- Übersicht: Abholungen/Rückgaben heute & morgen, offene Anfragen,
+  Schäden, Rechnungen, Fristen, Umsatz des Monats, offene Kautionen.
+- Kalender: Belegungsplan aller Fahrzeuge pro Monat. Auf einen freien
+  Tag tippen = neue Reservierung.
+- Fristen: HU/TÜV, Service, Versicherung sowie ablaufende Führerscheine
+  und Ausweise von Kunden mit anstehender Miete.
+- Schäden: mit Skizze, Fotos, Kosten, Kostenträger und Status.
+- Kunden: Ausweis- und Führerscheindaten, Fotos der Dokumente (Handy-Kamera),
+  Sperrvermerk, Mietverlauf. Löschen nach DSGVO (Verträge bleiben erhalten).
+- Suche oben: Kunde, Kennzeichen, Vertrags- oder Rechnungsnummer.
+- Rollen: Administratoren sehen zusätzlich Benutzer und Einstellungen.
+
+==================================================================
+10. VERBINDUNG ZUR WEBSITE
+==================================================================
+Buchungsanfragen von der Website einer Vermietung landen automatisch als
+„Anfrage“ in deren Mietverwaltung (inkl. Kunde und Preisvorschlag).
+Jede Vermietung hat ihre eigene Adresse und ihren eigenen Schlüssel:
+1. Mietverwaltung → Einstellungen → „Verbindung zur Website“:
+   Adresse und Schlüssel kopieren.
+2. WordPress → Fahrzeuge → Einstellungen → beide Werte eintragen → Speichern.
+   (Dafür wird das Website-Theme ab Version 1.1 benötigt.)
+
+==================================================================
+11. DATENSICHERUNG (durch den Kunden)
+==================================================================
+Einstellungen → „Datensicherung herunterladen“ lädt alle Daten, Fotos und das
+Logo der eigenen Vermietung als ZIP herunter. Empfehlung: einmal pro Woche.
+Wiederherstellen: Inhalt der ZIP-Datei in den Ordner data/mandanten/<kürzel> legen
+(Datenbank, Ordner uploads und branding).
+
+==================================================================
+12. WICHTIGE HINWEISE
+==================================================================
+- Die Mietbedingungen (Einstellungen → Mietbedingungen) sind ein MUSTER.
+  Bitte vor dem Einsatz von einem Anwalt prüfen lassen.
+- Rechnungen: Steuernummer/USt-IdNr. in den Einstellungen eintragen.
+  Die Rechnungen ersetzen keine Buchhaltungssoftware; für das Finanzamt
+  (GoBD) die PDFs zusätzlich archivieren bzw. an den Steuerberater geben.
+- Passwörter mit mindestens 10 Zeichen. Nach 8 Fehlversuchen wird die
+  Anmeldung für 15 Minuten gesperrt.
+
+Verwendete Software: FPDF (www.fpdf.org, freie Lizenz), Leaflet (leafletjs.com,
+BSD-Lizenz) für die Karten.

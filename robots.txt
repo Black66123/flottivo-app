@@ -1,0 +1,7 @@
+User-agent: *
+Disallow: /plattform.php
+Disallow: /cron.php
+Disallow: /stripe-webhook.php
+Disallow: /m/
+Disallow: /data/
+Disallow: /app/

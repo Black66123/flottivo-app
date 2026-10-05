@@ -1,0 +1,42 @@
+FLOTTIVO – FAHRPLAN (Stand 04.10.2026, Version 3.0.0)
+=====================================================
+Zum Abhaken. Ausführliche Anleitungen: ANLEITUNG.txt und app-projekt/ANLEITUNG-APP.txt
+
+A) UPDATE HOCHLADEN
+[ ] Ordner „data“ vom Server per FTP auf den PC sichern (nur herunterladen!)
+[ ] Alle Dateien hochladen – AUSSER: data, app-projekt, _GEHEIM-nicht-hochladen
+[ ] www.flottivo.de/verwaltung öffnen → System → alles grün?
+[ ] System → Verschlüsselung → Notfall-Schlüssel anzeigen, ausdrucken/Passwort-Manager,
+    „Ich habe den Schlüssel sicher aufbewahrt“ klicken
+
+B) SERVER & SICHERHEIT
+[ ] Hetzner konsoleH → SSL-Manager → Let's Encrypt für flottivo.de UND www.flottivo.de
+    (bei dogado muss www.flottivo.de auf das Hetzner-Hosting zeigen)
+[ ] Danach Bescheid geben → automatische Weiterleitung auf https einbauen lassen
+[ ] Täglichen Cronjob einrichten (konsoleH oder cron-job.org, Adresse steht unter System)
+[ ] Datensicherungen (data/backups) regelmäßig auf PC/externe Platte kopieren
+[ ] Zwei-Faktor-Anmeldung für alle Admins einschalten
+[ ] Bei dogado SPF, DKIM, DMARC für flottivo.de eintragen
+[ ] Plattform → Einstellungen: Support-E-Mail prüfen (Tickets gehen dorthin)
+
+C) APP (Reihenfolge wie in app-projekt/ANLEITUNG-APP.txt)
+[ ] D-U-N-S-Nummer beantragen (für Apple als Firma, dauert einige Tage)
+[ ] Apple Developer Program (99 €/Jahr) + App ID de.flottivo.app mit Push
+[ ] Google Play Console (25 €)
+[ ] Firebase-Projekt, Dienstkonto-Schlüssel in Verwaltung → „App & Push“ einfügen
+[ ] GitHub: privates Repository „flottivo-app“, Inhalt von app-projekt hochladen
+[ ] Codemagic einrichten, Android-Schlüssel aus _GEHEIM-nicht-hochladen hinterlegen
+[ ] Erster Build – bei Fehlern das Protokoll an Claude schicken
+[ ] Demo-Vermietung + Prüfzugang anlegen, Store-Texte/Bilder aus app-projekt nutzen
+[ ] Nach Freigabe: Store-Links in Verwaltung → „App & Push“ eintragen, Prüfzugang leeren
+
+D) RECHTLICHES (vom Anwalt/Datenschutzberater prüfen lassen)
+[ ] AV-Vertrag mit Hetzner (konsoleH)
+[ ] AV-Vertrag für Ihre Vermietungs-Kunden
+[ ] Rechtstexte (Impressum, Datenschutz, AGB) prüfen – auch wegen App und Push
+
+E) NÄCHSTE AUSBAUSTUFEN (mit Claude umsetzen)
+[ ] E-Rechnung (ZUGFeRD) – Pflicht ab 01.01.2027 für Firmen > 800.000 € Umsatz
+[ ] AV-Vertrag online bestätigen + automatisches Löschkonzept
+[ ] Automatische Zahlungserinnerungen an Mieter
+[ ] Online-Zahlung (Kaution/Anzahlung)

@@ -1,0 +1,245 @@
+FLOTTIVO – INSTALLATION AUF NORMALEM WEBHOSTING
+(Shared Hosting, z. B. dogado, IONOS, Strato, All-Inkl, Hetzner Webhosting)
+
+Diese Anleitung ergänzt ANLEITUNG.txt. Sie brauchen keinen eigenen Server,
+keine separate Datenbank und keinen Shell-Zugang. Alles wird per FTP und über
+das Kundenmenü des Hosters eingerichtet.
+
+==================================================================
+0. KURZ FÜR HETZNER WEBHOSTING (konsoleH)
+==================================================================
+Hetzner Webhosting passt: PHP 8 frei wählbar, .htaccess mit mod_rewrite
+(kurze Adressen funktionieren), kostenloses Let's-Encrypt-SSL, Cronjobs.
+Empfehlung: Paket M oder größer (mehr PHP-Prozesse, mehr Cronjobs);
+SSH gibt es erst ab Paket L – wird für Flottivo aber nicht benötigt.
+
+1. konsoleH → Domain bzw. Subdomain für die Plattform anlegen, PHP 8.x
+   wählen, Let's-Encrypt-Zertifikat für die (Sub-)Domain anfordern.
+2. Dateien per FTP hochladen (Punkt 3), Ordner „data“ beschreibbar.
+3. https://ihre-domain/verwaltung aufrufen → Einrichtungscode aus
+   data/einrichtungscode.txt eingeben.
+4. konsoleH → Cronjobs: täglich die Webcron-Adresse aus /verwaltung → System
+   aufrufen lassen (Datensicherung, Erinnerungen).
+5. Kunden-Adressen (Punkt 5): Let's Encrypt gibt es bei Hetzner Webhosting
+   pro (Sub-)Domain, ein kostenloses Wildcard-Zertifikat *.ihre-domain.de
+   nicht. Daher:
+   - Start: Pfad-Adressen ihre-domain.de/m/kuerzel/ (vollautomatisch).
+   - Pro Kunde eine Subdomain in konsoleH anlegen + Let's Encrypt
+     anfordern (ca. 2 Minuten), dann bei der Vermietung eintragen.
+   - Vollautomatisch kunde.ihre-domain.de für alle: kostenpflichtiges
+     Wildcard-Zertifikat bei Hetzner + Wildcard-DNS (bei Hetzner-Support
+     nachfragen, ob „*“ auf das Webhosting zeigen kann) – oder später ein
+     kleiner eigener Server mit Caddy (siehe werkzeuge/LIESMICH.txt).
+
+==================================================================
+1. PASST MEIN HOSTING? (vorher prüfen)
+==================================================================
+Im Kundenmenü des Hosters bzw. in der Paketbeschreibung nachsehen:
+
+[ ] PHP 8.1 oder neuer (im Menü meist unter „PHP-Version“ einstellbar)
+[ ] PHP-Erweiterungen: pdo_sqlite, gd, zip, openssl, curl, mbstring, iconv
+    (bei fast allen Hostern standardmäßig aktiv)
+[ ] Apache-Webserver mit .htaccess-Unterstützung und mod_rewrite
+[ ] Kostenloses SSL-Zertifikat (Let's Encrypt) für jede (Sub-)Domain
+[ ] Ein E-Mail-Postfach mit SMTP-Zugang (für den Versand der Plattform)
+[ ] Cronjobs im Kundenmenü – optional, es geht auch ohne (siehe Punkt 7)
+[ ] Speicherplatz: mindestens 5 GB (Fotos von Übergaben brauchen Platz)
+[ ] Für die GPS-Ortung: ausgehende Verbindungen zum Ortungsserver erlaubt
+    (am besten Ortungsserver per https:// auf Port 443 erreichbar machen –
+    manche günstige Hoster sperren andere Ports)
+
+Unsicher? Nach der Installation zeigt plattform.php → System eine Prüfliste
+mit grünen/roten Punkten. Rot = beim Hoster nachfragen oder Paket wechseln.
+
+==================================================================
+2. DOMAIN UND SSL ANLEGEN
+==================================================================
+1. Im Kundenmenü eine Domain oder Subdomain anlegen, z. B.
+     ihre-plattform.de        (eigene Domain für die Plattform)
+   oder
+     app.exclusivecars-nrw.de (Subdomain einer bestehenden Domain)
+2. Als Zielverzeichnis einen NEUEN, leeren Ordner wählen, z. B. /mietverwaltung
+   (nicht den Ordner Ihrer WordPress-Seite!).
+3. SSL / Let's Encrypt für diese Domain einschalten. Warten, bis das
+   Zertifikat aktiv ist (meist wenige Minuten).
+4. Im Menü „PHP-Einstellungen“ für diese Domain:
+     PHP-Version          8.2 oder 8.3
+     upload_max_filesize  20M (oder mehr)
+     post_max_size        25M (oder mehr)
+     memory_limit         256M
+     max_execution_time   120
+
+==================================================================
+3. DATEIEN HOCHLADEN
+==================================================================
+1. FTP-Programm öffnen (z. B. FileZilla), mit den FTP-Daten des Hosters
+   verbinden.
+2. Den INHALT des Ordners „mietverwaltung“ in das Zielverzeichnis der Domain
+   hochladen – also so, dass index.php direkt darin liegt:
+     /mietverwaltung/index.php
+     /mietverwaltung/plattform.php
+     /mietverwaltung/app/ …
+     /mietverwaltung/assets/ …
+     /mietverwaltung/data/ …
+     /mietverwaltung/.htaccess      ← wichtig, wird oft übersehen!
+   Tipp FileZilla: Menü „Server → Anzeige versteckter Dateien erzwingen“,
+   damit die .htaccess-Dateien sichtbar sind und mit hochgeladen werden.
+3. Beim Ordner „data“ (Rechtsklick → Dateiberechtigungen) die Rechte auf 775
+   setzen, Haken bei „In Unterverzeichnisse wechseln“.
+   Kommt später „Ordner nicht beschreibbar“: 777 versuchen.
+
+UPDATE einer bestehenden Installation: alles hochladen und überschreiben,
+AUSSER dem Ordner „data“ (dort liegen alle Daten). Vorher „data“ sichern.
+
+==================================================================
+4. EINRICHTEN
+==================================================================
+1. Im Browser öffnen:  https://ihre-plattform.de/plattform.php
+2. Einrichtungscode eingeben: Per FTP den Ordner „data“ öffnen, die Datei
+   einrichtungscode.txt herunterladen und den Code abtippen.
+   Dann Plattform-Name, Ihr Name, E-Mail und Passwort eingeben.
+   Liegen bereits Daten der alten Mietverwaltung im Ordner „data“, werden sie
+   als erste Vermietung übernommen.
+3. Danach in plattform.php der Reihe nach (siehe auch ANLEITUNG.txt):
+   - Plattform → Allgemein:
+       „Adresse Ihrer Website“  = https://ihre-plattform.de   (PFLICHT!)
+       „Basis-Domain“           = leer lassen (siehe Punkt 5)
+       Support-E-Mail, Logo, Farben
+   - Plattform → Betreiber: Ihre Firmendaten (für Impressum, AVV usw.)
+   - Plattform → E-Mail: SMTP-Daten Ihres Postfachs (siehe Punkt 6)
+   - Tarife, Stripe, Startseite
+   - Passwort & 2FA: Zwei-Faktor-Anmeldung aktivieren
+4. SICHERHEITSTEST – unbedingt machen:
+     https://ihre-plattform.de/data/plattform.sqlite
+   muss „Forbidden“ / „403“ / „Zugriff verweigert“ zeigen.
+   Wird stattdessen eine Datei heruntergeladen: SOFORT melden bzw. den Hoster
+   fragen, warum .htaccess nicht wirkt. Bis dahin keine echten Daten eingeben.
+   plattform.php → System prüft das zusätzlich automatisch (roter Punkt
+   „Datenordner ist von außen GESPERRT“ = Problem).
+   Noch sicherer: Ordner „data“ außerhalb des Webordners ablegen, siehe
+   config.beispiel.php.
+
+==================================================================
+5. ADRESSEN FÜR IHRE KUNDEN (Vermietungen)
+==================================================================
+Auf normalem Webhosting gibt es drei Möglichkeiten:
+
+A) PFAD-ADRESSE – funktioniert sofort, ohne Einrichtung (empfohlen für den Start)
+   Jede Vermietung ist automatisch erreichbar unter
+     https://ihre-plattform.de/m/<kürzel>/
+   z. B. https://ihre-plattform.de/m/autohaus-schmidt/
+   Voraussetzung: „Adresse Ihrer Website“ ist eingetragen, „Basis-Domain“ leer.
+
+B) SUBDOMAIN PRO KUNDE – professioneller, ca. 2 Minuten pro Kunde
+   1. Im Kundenmenü des Hosters eine Subdomain anlegen, z. B.
+        schmidt.ihre-plattform.de
+      Zielverzeichnis: DERSELBE Ordner wie die Plattform (/mietverwaltung).
+   2. SSL für die Subdomain einschalten.
+   3. In plattform.php → Vermietung bearbeiten → „Eigene Domain“:
+        schmidt.ihre-plattform.de   eintragen, speichern.
+   (Automatische Subdomains für alle Kunden auf einmal brauchen einen
+   Wildcard-Eintrag *.ihre-plattform.de mit Wildcard-Zertifikat. Das bieten
+   viele einfache Pakete nicht – dann Variante A oder B verwenden.
+   Bietet Ihr Hoster „Wildcard-Subdomain“ + Wildcard-SSL an: Basis-Domain
+   eintragen, dann bekommt jeder Kunde automatisch kunde.ihre-plattform.de.
+   plattform.php → System zeigt, ob es funktioniert. Auf einem eigenen
+   Rootserver geht es immer – siehe ANLEITUNG.txt „Automatische Subdomains“.)
+
+C) EIGENE DOMAIN DES KUNDEN (z. B. verwaltung.autohaus-schmidt.de)
+   1. Der Kunde stellt bei seinem Domain-Anbieter einen CNAME-Eintrag
+      auf ihre-plattform.de (oder einen A-Eintrag auf die IP Ihres Webspace).
+   2. Sie fügen die Domain im Kundenmenü Ihres Hosters als externe Domain
+      hinzu, Zielverzeichnis /mietverwaltung, SSL einschalten.
+   3. In plattform.php bei der Vermietung unter „Eigene Domain“ eintragen.
+
+Hinweis: Kunden, die sich selbst registrieren, bekommen automatisch eine
+Pfad-Adresse (A). Sie können ihnen später jederzeit eine Subdomain (B)
+zuweisen – die alte Adresse funktioniert dann nicht mehr, bitte Kunden
+informieren.
+
+==================================================================
+6. E-MAIL-VERSAND EINRICHTEN
+==================================================================
+1. Im Kundenmenü ein Postfach anlegen, z. B. no-reply@ihre-plattform.de.
+2. In plattform.php → Plattform → E-Mail eintragen:
+     Versand            SMTP-Server
+     Absender-Adresse   no-reply@ihre-plattform.de
+     SMTP-Server        steht in der Hilfe des Hosters (z. B. smtp.<hoster>.de)
+     Port / Verschlüsselung  587 + STARTTLS  (oder 465 + SSL/TLS)
+     Benutzername       meist die vollständige E-Mail-Adresse
+     Passwort           Passwort des Postfachs
+3. „Test-E-Mail senden“ – kommt sie an (auch im Spam-Ordner nachsehen)?
+4. Für gute Zustellung: Im DNS der Domain SPF und DKIM aktivieren (bei den
+   meisten Hostern ein Häkchen im E-Mail- oder DNS-Menü).
+
+==================================================================
+7. TÄGLICHE AUFGABEN (Datensicherung, Erinnerungen)
+==================================================================
+Die Plattform muss einmal täglich „angestoßen“ werden.
+
+Variante 1 – Cronjob im Kundenmenü des Hosters (falls vorhanden):
+   Typ „URL aufrufen“ bzw. „Webcron“, täglich 03:00 Uhr, Adresse:
+     siehe plattform.php → System → „Ohne Shell-Zugang“
+     (sieht aus wie https://ihre-plattform.de/cron.php?key=…)
+   Manche Hoster erlauben stattdessen ein PHP-Skript:
+     /pfad/zum/webspace/mietverwaltung/cron.php
+
+Variante 2 – kostenloser Dienst, wenn der Hoster keine Cronjobs hat:
+   z. B. cron-job.org → Konto anlegen → neuen Cronjob mit der Adresse oben,
+   täglich 03:00 Uhr.
+
+Kontrolle: plattform.php → System zeigt „Letzter Lauf“ und die Sicherungen.
+
+==================================================================
+8. DATENSICHERUNG AUF WEBHOSTING
+==================================================================
+- Der Cron legt jede Nacht Sicherungen in data/backups ab (14 Tage).
+  Diese liegen auf DEMSELBEN Webspace – fällt der aus, sind sie mit weg.
+- Deshalb regelmäßig (z. B. wöchentlich) per FTP den Ordner data/backups
+  auf Ihren PC oder ein NAS herunterladen.
+- Zusätzlich bieten viele Hoster eigene tägliche Backups des Webspace an –
+  im Kundenmenü prüfen und ggf. aktivieren.
+- Speicherplatz im Blick behalten (Fotos!). Bei Bedarf die Aufbewahrung
+  unter plattform.php → System verkürzen oder ein größeres Paket wählen.
+
+==================================================================
+9. HÄUFIGE PROBLEME
+==================================================================
+„500 Internal Server Error“ direkt nach dem Hochladen
+  → Manche Hoster erlauben die Zeile „Options -Indexes“ in der .htaccess
+    nicht. Die .htaccess im Hauptordner öffnen und diese Zeile löschen.
+  → PHP-Version prüfen (mindestens 8.1).
+
+Seite zeigt „Der Ordner data ist nicht beschreibbar“
+  → Rechte des Ordners „data“ auf 775, notfalls 777 (inkl. Unterordner).
+
+Adressen /m/<kürzel>/ zeigen „Not Found“
+  → mod_rewrite ist nicht aktiv oder die .htaccess fehlt im Hauptordner.
+    Hoster fragen bzw. Datei erneut hochladen (versteckte Dateien anzeigen!).
+    Alternativ Variante B (Subdomain pro Kunde) verwenden.
+
+Nach der Anmeldung landet man wieder auf der Anmeldeseite
+  → Die Seite über https:// aufrufen (nicht http://) und in den
+    PHP-Einstellungen prüfen, dass Sessions erlaubt sind (Standard).
+
+Fotos lassen sich nicht hochladen / Übergabe bricht ab
+  → upload_max_filesize und post_max_size erhöhen (Punkt 2).
+
+E-Mails kommen nicht an
+  → plattform.php → Plattform → E-Mail → Test-E-Mail; die Fehlermeldung
+    unten im Versandprotokoll lesen. Häufig: falscher Port oder Benutzername.
+
+Stripe-Webhook schlägt fehl
+  → In Stripe als Adresse https://ihre-plattform.de/stripe-webhook.php
+    eintragen (mit https). Manche Hoster blockieren eingehende Anfragen mit
+    Schutzfiltern (WAF) – Hoster bitten, stripe-webhook.php freizugeben.
+
+==================================================================
+10. WANN AUF DEN EIGENEN SERVER WECHSELN?
+==================================================================
+Normales Webhosting reicht für den Start und einige Dutzend Vermietungen.
+Ein Wechsel auf den eigenen Server lohnt sich, wenn
+- viele Kunden eigene Subdomains bekommen sollen (Wildcard),
+- der Speicherplatz knapp wird oder die Seite langsam reagiert,
+- Sie Sicherungen automatisch auf einen zweiten Server kopieren möchten.
+Umzug: Ordner komplett kopieren (inkl. „data“), Domain umstellen – fertig.
